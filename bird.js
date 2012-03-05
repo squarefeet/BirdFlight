@@ -41,7 +41,7 @@ Bird.prototype = {
 	
 	colors: {
 		body: '50, 50, 50, 1',
-		wing: '0, 0, 0, 1'
+		wing: '0, 0, 0, 0.5'
 	},
 	
 	body: [],
@@ -52,20 +52,32 @@ Bird.prototype = {
 		right: []
 	},
 	
-	updateRate: 0.002,
+	updateRate: 0.02,
 	
 	speedChangeOnFrame: 100,
 	
 	variableSpeed: false,
 	
-	wingWidth: 75,
+	wingWidth: 70,
 	wingPinch: 10,
 	wingTipLength: 100,
 	wingLength: 10,
 	
 	wingOffsetY: 0,
 	
-	bodyMovement: 5,
+	bodyMovement: 3,
+	
+	velocity: {
+		x: 0,
+		y: 0
+	},
+	
+	angle: 0,
+	
+	getDT: function(dt) {
+		return dt *= this.updateRate;
+		return dt *= keys.isPressed(32) ? 0.00005 : this.updateRate;
+	},
 	
 	
 	/**
@@ -112,11 +124,26 @@ Bird.prototype = {
 	*	Updates the body position
 	*/
 	updateBody: function(dt) {
-		dt *= this.updateRate;
+		var squish = 0;
 		
-		this.body[0].y = -Math.sin(dt) * this.bodyMovement + this.originalBody[0].y;
-		this.body[1].y = -Math.sin(dt) * this.bodyMovement + this.originalBody[1].y;
-		this.body[2].y = -Math.sin(dt) * this.bodyMovement + this.originalBody[2].y;
+		if(keys.isPressed(32)) return;
+		
+		dt = this.getDT(dt);
+		
+		if(this.angle < -0.3) {
+			dt *= 2;
+		}
+		else if(this.angle > 0.3) {
+			dt /= 100;
+		}
+		
+		if((keys.isPressed(68)) || (keys.isPressed(65))) {
+			squish = -5;
+		}
+		
+		this.body[0].y = -Math.sin(dt) * this.bodyMovement + this.originalBody[0].y - squish; // top
+		this.body[1].y = -Math.sin(dt) * this.bodyMovement + this.originalBody[1].y + this.velocity.y; // point
+		this.body[2].y = -Math.sin(dt) * this.bodyMovement + this.originalBody[2].y + squish; // bottom
 	},
 	
 	/**
@@ -183,18 +210,32 @@ Bird.prototype = {
 	*	Updates a wing
 	*/
 	updateWing: function(side, dt) {
+		if(keys.isPressed(32)) return;
+		
 		var wing = this.wings[side],
 			baseX1 = this.x + (this.width / 2) - (this.wingWidth / 2),
 			baseX2 = this.x + (this.width / 2) + (this.wingWidth / 2),
-			baseY = this.y + (this.height / 2);
+			baseY = this.y + (this.height / 2) + this.velocity.y;
 		
 		var leftRightIncrement = side === 'left' ? 0.5 : 0.5;
 		
-		dt *= this.updateRate;
+		dt = this.getDT(dt);
+		
+		if(this.angle < -0.3) {
+			dt *= 2;
+		}
+		else if(this.angle > 0.3) {
+			dt /= 100;
+		}
 		
 		// Update the base positions
 		wing[0].y = -Math.sin(dt) * this.bodyMovement + baseY;
 		wing[1].y = -Math.sin(dt) * this.bodyMovement + baseY;
+		
+		if((side === 'right' && keys.isPressed(68)) || (side === 'left' && keys.isPressed(65))) {
+			dt *= 0.1;
+		}
+		
 		
 		// Update mid positions
 		// left mid pos
@@ -247,13 +288,32 @@ Bird.prototype = {
 			
 		
 		function loop(now) {
-			that.updateWing('left', now);
-			that.updateBody(now);
-			that.updateWing('right', now);
 			
 			that.ctx.fillStyle = 'rgba(255, 255, 255, 1)';
 			
 			that.ctx.fillRect(0, 0, that.canvas.width, that.canvas.height);
+			
+			
+			if(keys.isPressed(87)) that.angle -= 0.05;
+			else if(keys.isPressed(83)) that.angle += 0.05;
+			
+			if(that.angle > 1) {
+				that.angle = 1;
+			}
+			else if(that.angle < -1) {
+				that.angle = -1;
+			}
+			
+			that.ctx.save();
+			
+			that.ctx.translate(that.canvas.width/2, that.canvas.height/2);
+			that.ctx.rotate(that.angle);
+			that.ctx.translate(-that.canvas.width/2, -that.canvas.height/2);
+			
+			that.updateWing('left', now);
+			that.updateBody(now);
+			that.updateWing('right', now);
+			
 			
 			that.drawWing('left');			
 			that.drawBody();
@@ -266,6 +326,8 @@ Bird.prototype = {
 				that.updateRate = Math.min(Math.random() / 10, 0.03);
 				that.speedChangeOnFrame = Math.random() * 100;
 			}
+			
+			that.ctx.restore();
 		}
 		
 		
@@ -291,8 +353,46 @@ Bird.prototype = {
 };
 
 
+
+function KeyManager() {
+	var that = this;
+	
+	this.keys = {};
+	
+	this.initialize = function() {
+		document.body.addEventListener('keydown', this.onKeyDown, false);
+		document.body.addEventListener('keyup', this.onKeyUp, false);
+	};
+	
+	this.onKeyDown = function(e) {
+		console.log(e.keyCode);
+		that.keys[e.keyCode] = true;
+	};
+	
+	this.onKeyUp = function(e) {
+		that.keys[e.keyCode] = false;
+	};
+	
+	this.isPressed = function(key) {
+		return this.keys[key];
+	};
+	
+}
+
+
+var bird, keys;
+
 function main() {
-	var bird = new Bird(document.getElementById('myCanvas'), 200, 100, 200, 50);
+	bird = new Bird(document.getElementById('myCanvas'), 200, 175, 200, 60);
+	
+	keys = new KeyManager();
+	
+	keys.initialize();	
+	
 	bird.init();
 	bird.render();
 }
+
+
+
+
